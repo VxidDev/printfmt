@@ -2,6 +2,7 @@ global printfmt
 
 section .bss
   intBuf resb 32
+  charBuf resb 1 
 
 section .text 
 
@@ -98,13 +99,13 @@ load_arg: ; rdi = argument index | rax = value
   lea rax, [r15 - 48 + rdi * 8]
   neg rdi
 
-  movsxd rax, dword [rax]
+  mov rax, [rax]
   ret 
 
   .takeFromStack:
     sub rdi, 5
     lea rax, [r15 + 16 + rdi * 8]
-    movsxd rax, dword [rax]
+    mov rax, [rax]
 
     ret 
 
@@ -147,7 +148,10 @@ printfmt: ; rdi = fmtString , ...
       je .printstr
 
       cmp byte [rbx + r13], 'd'
-      je .printint 
+      je .printint
+
+      cmp byte [rbx + r13], 'c'
+      je .printcharArg 
       
       dec r13
       jmp .printchar
@@ -177,8 +181,8 @@ printfmt: ; rdi = fmtString , ...
       mov rdi, r12 
       call load_arg 
       inc r12 
-
-      mov rdi, rax
+      
+      movsxd rdi, eax 
       mov rsi, intBuf   
       call itoa 
 
@@ -191,7 +195,25 @@ printfmt: ; rdi = fmtString , ...
       
       inc r13 
 
-      jmp .loop 
+      jmp .loop
+
+    .printcharArg:
+      mov rdi, r12 
+      call load_arg 
+      inc r12 
+      
+      mov [charBuf], al 
+      
+      mov rax, 1 
+      mov rdi, 1 
+      mov rsi, charBuf 
+      mov rdx, 1 
+
+      syscall
+
+      inc r13 
+
+      jmp .loop
 
     .printchar:
       lea r14, [rbx + r13] 
