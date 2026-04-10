@@ -4,7 +4,6 @@ A minimal implementation of a printf-like formatted output function written in x
 ## Usage:
 
 ```c 
-```c 
 extern void printfmt(const char* fmt, ...); 
 
 int main(int argc, char **argv) {
@@ -18,7 +17,3 @@ int main(int argc, char **argv) {
 
 ## License:
 MIT license 
-```
-```
-```
-```
