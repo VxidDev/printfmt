@@ -1,5 +1,10 @@
 global printfmt
 
+section .bss
+  intBuf resb 32
+
+section .text 
+
 strlen: ; rdi = string 
   xor rax, rax
 
@@ -13,6 +18,78 @@ strlen: ; rdi = string
   .end:
     ret
 
+itoa: ; rdi = integer, rsi = buffer | rax = length
+    push rbx
+
+    xor rcx, rcx ; index
+    xor r8, r8 ; length
+    xor r9, r9 ; sign flag
+
+    cmp rdi, 0
+    jne .check_sign
+
+    mov byte [rsi], '0'
+    mov byte [rsi+1], 0
+    mov rax, 1
+    pop rbx
+    ret
+
+  .check_sign:
+    cmp rdi, 0
+    jge .convert
+
+    mov r9, 1
+    neg rdi
+
+  .convert:
+  .loop:
+    mov rax, rdi
+    xor rdx, rdx
+    mov rbx, 10
+    div rbx
+
+    add dl, '0'
+    mov [rsi + rcx], dl
+
+    inc rcx
+    inc r8
+
+    mov rdi, rax
+    cmp rdi, 0
+    jne .loop
+
+    cmp r9, 0
+    je .reverse
+
+    mov byte [rsi + rcx], '-'
+    inc rcx
+    inc r8
+
+  .reverse:
+    xor rbx, rbx
+    dec rcx
+
+  .rev_loop:
+    cmp rbx, rcx
+    jge .done
+
+    mov al, [rsi + rbx]
+    mov dl, [rsi + rcx]
+
+    mov [rsi + rbx], dl
+    mov [rsi + rcx], al
+
+    inc rbx
+    dec rcx
+    jmp .rev_loop
+
+  .done:
+    mov byte [rsi + r8], 0   
+    mov rax, r8           
+
+    pop rbx
+    ret
+
 load_arg: ; rdi = argument index | rax = value 
   cmp rdi, 4 
   jg .takeFromStack
@@ -21,13 +98,13 @@ load_arg: ; rdi = argument index | rax = value
   lea rax, [r15 - 48 + rdi * 8]
   neg rdi
 
-  mov rax, [rax]
+  movsxd rax, dword [rax]
   ret 
 
   .takeFromStack:
     sub rdi, 5
     lea rax, [r15 + 16 + rdi * 8]
-    mov rax, [rax]
+    movsxd rax, dword [rax]
 
     ret 
 
@@ -68,6 +145,9 @@ printfmt: ; rdi = fmtString , ...
 
       cmp byte [rbx + r13], 's'
       je .printstr
+
+      cmp byte [rbx + r13], 'd'
+      je .printint 
       
       dec r13
       jmp .printchar
@@ -90,6 +170,26 @@ printfmt: ; rdi = fmtString , ...
       syscall
       
       inc r13  
+
+      jmp .loop
+
+    .printint:
+      mov rdi, r12 
+      call load_arg 
+      inc r12 
+
+      mov rdi, rax
+      mov rsi, intBuf   
+      call itoa 
+
+      mov rdx, rax
+      mov rsi, intBuf
+      mov rdi, 1 
+      mov rax, 1 
+
+      syscall 
+      
+      inc r13 
 
       jmp .loop 
 
