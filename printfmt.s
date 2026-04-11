@@ -1,4 +1,10 @@
+default rel
+
 global printfmt
+
+section .data
+  longFlag db 0 
+  unsignedFlag db 0
 
 section .bss
   intBuf resb 32
@@ -91,6 +97,62 @@ itoa: ; rdi = integer, rsi = buffer | rax = length
     pop rbx
     ret
 
+utoa: ; rdi = unsigned integer, rsi = buffer | rax = length
+    push rbx
+
+    xor rcx, rcx ; index
+    xor r8, r8   ; length
+
+    cmp rdi, 0
+    jne .loop
+
+    mov byte [rsi], '0'
+    mov byte [rsi+1], 0
+    mov rax, 1
+    pop rbx
+    ret
+
+  .loop:
+    mov rax, rdi
+    xor rdx, rdx
+    mov rbx, 10
+    div rbx       
+
+    add dl, '0'
+    mov [rsi + rcx], dl
+
+    inc rcx
+    inc r8
+
+    mov rdi, rax
+    test rdi, rdi
+    jnz .loop
+
+  .reverse: 
+    xor rbx, rbx
+    dec rcx
+
+  .rev_loop:
+    cmp rbx, rcx
+    jge .done
+
+    mov al, [rsi + rbx]
+    mov dl, [rsi + rcx]
+
+    mov [rsi + rbx], dl
+    mov [rsi + rcx], al
+
+    inc rbx
+    dec rcx
+    jmp .rev_loop
+
+  .done:
+    mov byte [rsi + r8], 0
+    mov rax, r8
+
+    pop rbx
+    ret
+
 load_arg: ; rdi = argument index | rax = value 
   cmp rdi, 4 
   jg .takeFromStack
@@ -142,17 +204,73 @@ printfmt: ; rdi = fmtString , ...
     jmp .printchar 
 
     .fmtchk:
-      inc r13 
+      inc r13
 
+      cmp byte [rbx + r13], '%'
+      je .printchar 
+
+      mov byte [longFlag], 0
+      mov byte [unsignedFlag], 0
+      
+      cmp byte [rbx + r13], 'u'
+      je .setUnsignedFlag 
+
+      jmp .checkLongFlag 
+      
+      .setUnsignedFlag:
+        mov byte [unsignedFlag], 1 
+        inc r13 
+
+      .checkLongFlag:
+
+      cmp byte [rbx + r13], 'l'
+      je .setLongFlag 
+
+      jmp .continueCheck
+      
+      .setLongFlag:
+        mov byte [longFlag], 1
+        inc r13 
+
+        cmp byte [rbx + r13], 'l'
+        je .inc 
+
+        jmp .continueCheck
+
+        .inc:
+          inc r13
+
+      .continueCheck:
+        
       cmp byte [rbx + r13], 's'
       je .printstr
 
       cmp byte [rbx + r13], 'd'
-      je .printint
+      je .int
 
-      cmp byte [rbx + r13], 'c'
-      je .printcharArg 
+      cmp byte [rbx + r13 - 1], 'l'
+      je .int 
       
+      jmp .continue 
+
+      .int:
+        cmp byte [unsignedFlag], 1 
+        je .uint
+
+        jmp .printint
+
+        .uint:
+          cmp byte [longFlag], 1 
+          je .printuint
+
+          inc r13
+          jmp .printuint
+
+      .continue:
+        cmp byte [rbx + r13], 'c'
+        je .printcharArg 
+      
+
       dec r13
       jmp .printchar
       
@@ -182,9 +300,18 @@ printfmt: ; rdi = fmtString , ...
       call load_arg 
       inc r12 
       
-      movsxd rdi, eax 
-      mov rsi, intBuf   
-      call itoa 
+      cmp byte [longFlag], 1
+      je .long
+
+      movsxd rdi, eax
+      jmp .convert 
+
+      .long:
+        mov rdi, rax
+      
+      .convert:
+        mov rsi, intBuf   
+        call itoa 
 
       mov rdx, rax
       mov rsi, intBuf
@@ -193,16 +320,44 @@ printfmt: ; rdi = fmtString , ...
 
       syscall 
       
-      inc r13 
+      inc r13
 
       jmp .loop
+
+    .printuint:
+      mov rdi, r12 
+      call load_arg 
+      inc r12 
+
+      cmp byte [longFlag], 1 
+      je .ulong 
+
+      mov edi, eax 
+      mov rdi, rax 
+      jmp .uconvert
+
+      .ulong:
+        mov rdi, rax 
+
+      .uconvert:
+        mov rsi, intBuf
+        call utoa 
+
+      mov rdx, rax 
+      mov rsi, intBuf
+      mov rdi, 1 
+      mov rax, 1 
+
+      syscall 
+
+      jmp .loop 
 
     .printcharArg:
       mov rdi, r12 
       call load_arg 
       inc r12 
       
-      mov [charBuf], al 
+      mov byte [charBuf], al 
       
       mov rax, 1 
       mov rdi, 1 
